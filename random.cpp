@@ -12,7 +12,7 @@ This program takes a txt file with basic arithmetic functions in C++ as input, a
 #include <algorithm>
 using namespace std;
 
-void variableDeclaration() //eg. int a = 0 , b = 1;
+void variableDeclaration(string &code, int loc_rbp) //eg. int a = 0 , b = 1;
 {
 }
 
@@ -34,7 +34,7 @@ void readFile(const string &fileName, string &code)
 
     while (getline(infile, readline))
     {
-        cout << readline << endl;
+        cout << readline << endl; //outputs given code to screen
         testStr = readline;
         //get the return string
         code += readline;
