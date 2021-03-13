@@ -29,6 +29,7 @@ bool isFalseResult = false;
 //note the start position of comparison in for statement
 bool for_startComparison = false;
 int numOfCmpl = 1;
+int numOfResult_For = 1;
 
 //////////////////////////
 // FUNCTIONS............//
@@ -50,7 +51,7 @@ void functionDeclaration(vector<string> &parsedLine)
     redZoneCount = 0;     //resets redzone data usage counter
     redZoneBreak = false; //resets redzone break detection
 
-    int words = parsedLine.size();
+    int words = parsedLine.size(); //gives me a warning if I don't do this...?
 
     //label
     cout << parsedLine[1] << ":" << endl;
@@ -148,7 +149,7 @@ void functionDeclaration(vector<string> &parsedLine)
             openBracket++;
     }
 
-    if (redZoneCount > 32) //exits redzone, need to move %rsp
+    if (redZoneCount > 32) //if function exits redzone, need to move %rsp
     {
         redZoneBreak = true;
         cout << "subq   $" << 4 + (4 * (redZoneCount - 32)) << ", %rsp" << endl;
@@ -164,7 +165,7 @@ void functionCall(vector<string> &parsedLine)
     int words = parsedLine.size();
     for (int i = 4; i < words; i++)
     {
-        if (variableToRbp.count(parsedLine[i] + '0') == 1) //for array members
+        if (variableToRbp.count(parsedLine[i] + '0') > 0) //for array members; if variableToRbp[n0] exists then....
         {
             cout << "leaq   ";
             cout << variableToRbp[(parsedLine[i] + '0')]; //address of first member of array
@@ -193,11 +194,10 @@ void functionCall(vector<string> &parsedLine)
                 cout << "pushq   %rdi" << endl; //pushes additional variables to stack (always the whole quadword!)
                 functCallRedZoneCounter++;
             }
-            cout << "movq   %rax, %rdi" << endl; //prepare for function call to return to %edi
-            i++;                                 //move to next parameter
+            cout << "movq   %rax, %rdi" << endl; //prepare for function call to return to %edi (%rdi contains %edi)
         }
 
-        else if (variableToRbp.count(parsedLine[i]) == 1) //for int parameters
+        else if (variableToRbp.count(parsedLine[i]) > 0) //for int parameters
         {
             cout << "movl   ";
             cout << variableToRbp[(parsedLine[i])]; //address of int
@@ -245,6 +245,12 @@ void detectStatement(vector<string> &parsedLine)
     //check if need a jumpLabel before output instructions
     jumpLabel(outputLabel, isFalseResult);
 
+    //check if need a comparison label for the forStatement
+    if (for_startComparison)
+    {
+        startComparison(parsedLine, for_startComparison);
+    }
+
     switch (parsedLine[0])
     {
     case "if":
@@ -273,9 +279,9 @@ void detectStatement(vector<string> &parsedLine)
 
 void variableOrFunctionDec(vector<string> &parsedLine)
 {
-    if (parsedLine[2] == '=')
+    if (parsedLine[2] == "=")
         variableDeclarations(parsedLine);
-    else if (parsedLine[2] == '(')
+    else if (parsedLine[2] == "(")
         functionDeclaration(parsedLine);
     else
         throw std::invalid_argument("parsedLine[2] is not '=' or '('. Unable to understand statement");
@@ -290,7 +296,7 @@ void arithmeticOrFunctionCall(vector<string> &parsedLine)
 {
     enum arithmeticSigns('+', '-', '*');
 
-    if (parsedLine[3] == '(')
+    if (parsedLine[3] == "(")
         functionCall(parsedLine);
     else if (parsedLine[3] == arithmeticSigns)
         arithmeticStatement(parsedLine);
@@ -389,7 +395,7 @@ void checkIfVarType(vector<string> parsedLine)
         cout << "movl " << variableToRbp[parsedLine[1]] << "(%rbp), %eax" << endl;
 
         //if op2 is a number
-        if (isdigit(parsedLine[3]))
+        if (isdigit(parsedLine[3][0]))
         {
             cout << "cmpl "
                  << "$" << parsedLine[3] << "(%rbp), %eax" << endl;
@@ -414,7 +420,7 @@ void checkIfVarType(vector<string> parsedLine)
         cout << "movl " << variableToRbp[arrayVar1] << "(%rbp,%rax,4), %eax" << endl;
 
         //if op2 is a number
-        if (isdigit(parsedLine[3]))
+        if (isdigit(parsedLine[3][0]))
         {
             cout << "cmpl "
                  << "$" << parsedLine[3] << "(%rbp), %eax" << endl;
@@ -476,39 +482,54 @@ void jumpLabel(bool outputLabel, bool isFalseResult)
 void forStatement(vector<string> parsedLine)
 {
 
-    //remove "for" from the initialization
+    //remove "for" from the initialization line
     vector<string> initialStr;
     for (int i = 1; i < parsedLine.size(); i++)
     {
         initialStr.push_back(parsedLine[i]);
     }
 
+    //initial index value of for statement
     variableOrFunctionDec(initialStr);
     for_startComparison = true;
 }
 
-void startComparison(vector<string> parsedLine, bool a)
+/*
+
+*/
+void startComparison(vector<string> parsedLine, bool startCmpl)
 {
-
-    cout << ".starting_of_comparison" << numOfCmpl << endl;
-    cout << "movl " << variableToRbp[parsedLine[0]] << "(%rbp), %eax" << endl;
-    cout << "cmpl "
-         << "$" << parsedLine[2] << ", %eax" << endl;
-
-    if (parsedLine[1] == "<")
+    if (startCmpl)
     {
-        cout << "jge .false_for" << numOf endl;
-    }
-    else if (parsedLine[1] == ">")
-    {
-        cout << "jle .false_for" << endl;
+        //Output the comparison label
+        cout << ".starting_of_comparison" << numOfCmpl << endl;
+        numOfCmpl++;
+
+        cout << "movl " << variableToRbp[parsedLine[0]] << "(%rbp), %eax" << endl;
+        cout << "cmpl "
+             << "$" << parsedLine[2] << ", %eax" << endl;
+
+        // a < int
+        if (parsedLine[1] == "<")
+        {
+            cout << "jge .false_for" << numOfResult_For << endl;
+            numOfResult_For++;
+        }
+        //a > int
+        else if (parsedLine[1] == ">")
+        {
+            cout << "jle .false_for" << numOfResult_For << endl;
+            numOfResult_For++;
+        }
+
+        startCmpl = false;
     }
 }
 
 void returnStatement(vector<string> parsedLine)
 {
     //return a specific number
-    if (isdigit(parsedLine[1]))
+    if (isdigit(parsedLine[1][0]))
     {
         cout << "movl "
              << "$" << parsedLine[1] << ", %eax" << endl;
