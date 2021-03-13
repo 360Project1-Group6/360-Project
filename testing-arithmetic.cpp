@@ -16,7 +16,9 @@ using namespace std;
 map<string, string> variableToRbp;
 int offset = 1;
 int functionOffset = 1;
-int stackCount = 0;        //counts # of 4-bit variables (ints) on stack (in the case of exiting the redzone ie. more than 38 variables in test (6 registers + 32 4-bit spaces within redzone))
+
+int regCount = 0;          //counts # of registers in use
+int redZoneCount = 0;      //counts amount of Red Zone used in units of 4 bytes
 bool redZoneBreak = false; // if function breaks redzone (more than 128 bytes used), then redZoneBreak = true.
 int openBracket = 0;       // keeps track of # of nested statements
 
@@ -24,11 +26,15 @@ int openBracket = 0;       // keeps track of # of nested statements
 bool outputLabel = false;
 bool isFalseResult = false;
 
+//note the start position of comparison in for statement
+bool for_startComparison = false;
+int numOfCmpl = 1;
+
 //////////////////////////
 // FUNCTIONS............//
 //////////////////////////
 
-//int test(int a, int b) {
+//int test(int a[1], int b, int c[3]) {
 void functionDeclaration(vector<string> &parsedLine)
 {
     //this is the epilogue for test(), for when we enter main(). We must print out the epilogue for test() if it exists.
@@ -39,80 +45,195 @@ void functionDeclaration(vector<string> &parsedLine)
         cout << "popq %rbp" << '\n'
              << "ret" << endl;
 
-    redZoneBreak = false; //resets redzone break detection
     functionOffset = 1;   //resets functionOffset
+    regCount = 0;         //resets registers
+    redZoneCount = 0;     //resets redzone data usage counter
+    redZoneBreak = false; //resets redzone break detection
+
     int words = parsedLine.size();
 
     //label
     cout << parsedLine[1] << ":" << endl;
 
-    //counts # of variables needed to be stored
-    int varCount = 0;
-    for (int i = 3; i < words; i++)
-    {
-        if (parsedLine[i] == "int")
-            varCount++;
-        else if (parsedLine[i] == "[") //if function parameter is member of an array, not a standalone int
-            varCount--;
-        else if (parsedLine[i] == "{")
-            openBracket++;
-    }
     //prologue
     cout << "pushq %rbp" << '\n'
          << "movq %rsp, %rbp" << endl;
 
-    // putting variables in memory
-    for (int i = 1; i <= varCount; i++)
+    //printing...
+    for (int i = 3; i < words; i++)
     {
-        //i <= 6, meaning all ints stored in registers
-        if (i == 1)
+        if (parsedLine[i] == "int" && parsedLine[i + 2] == "[") //if parameter is member of array...
         {
-            cout << "movl   %edi, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
-            functionOffset++;
+            cout << "movq   ";
+            switch (regCount) //if registers are available
+            {
+            case 0:
+                cout << "%rdi, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                functionOffset += 2;
+                regCount++;
+                break;
+            case 1:
+                cout << "%rsi, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                functionOffset += 2;
+                regCount++;
+                break;
+            case 2:
+                cout << "%rdx, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                functionOffset += 2;
+                regCount++;
+                break;
+            case 3:
+                cout << "%rcx, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                functionOffset += 2;
+                regCount++;
+                break;
+            case 4:
+                cout << "%r8, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                functionOffset += 2;
+                regCount++;
+                break;
+            case 5:
+                cout << "%r9, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                functionOffset += 2;
+                regCount++;
+                break;
+            default:
+                redZoneCount += 2;
+                break;
+            }
+            i += 4; //skip to next parameter
         }
-        if (i == 2)
+        else if (parsedLine[i] == "int") //parameter is a regular int variable
         {
-            cout << "movl   %esi, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
-            functionOffset++;
+            cout << "movl   ";
+            switch (regCount) //if registers are available
+            {
+            case 0:
+                cout << "%edi, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                functionOffset += 1;
+                regCount++;
+                break;
+            case 1:
+                cout << "%esi, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                functionOffset += 1;
+                regCount++;
+                break;
+            case 2:
+                cout << "%edx, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                functionOffset += 1;
+                regCount++;
+                break;
+            case 3:
+                cout << "%ecx, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                functionOffset += 1;
+                regCount++;
+                break;
+            case 4:
+                cout << "%r8d, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                functionOffset += 1;
+                regCount++;
+                break;
+            case 5:
+                cout << "%r9d, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                functionOffset += 1;
+                regCount++;
+                break;
+            default:
+                redZoneCount += 1;
+                break;
+            }
+            i++; //skip to next parameter
         }
-        if (i == 3)
-        {
-            cout << "movl   %edx, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
-            functionOffset++;
-        }
-        if (i == 4)
-        {
-            cout << "movl   %ecx, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
-            functionOffset++;
-        }
-        if (i == 5)
-        {
-            cout << "movl   %r8d, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
-            functionOffset++;
-        }
-        if (i == 6)
-        {
-            cout << "movl   %r9d, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
-            functionOffset++;
-        }
-        //i > 6, meaning some stored on stack. Default (ie. 6 < i < 32) is within redzone, so no need to move rsp.
-        if (i == 32)
-        { //breaks redzone
-            cout << "subq   $4, %rsp," << endl;
-            stackCount++;
-            redZoneBreak = true;
-        }
-        if (i > 32)
-        { //outside redzone
-            cout << "subq   $" << 4 + (4 * stackCount) << ", %rsp" << endl;
-            stackCount++;
-        }
+        else if (parsedLine[i] == "{") //open bracket
+            openBracket++;
+    }
+
+    if (redZoneCount > 32) //exits redzone, need to move %rsp
+    {
+        redZoneBreak = true;
+        cout << "subq   $" << 4 + (4 * (redZoneCount - 32)) << ", %rsp" << endl;
     }
 }
 
 //i = test(a, b, c, d)
+// if parameter is int, use movl X(%register). if it is array member, use leaq Y(%register), where Y is lowest offset in array (ie offset of first element in array)
 void functionCall(vector<string> &parsedLine)
 {
+    int functCallRegCounter = 0;     //counts # of registers used in function call
+    int functCallRedZoneCounter = 0; //counts # of 8-byte (quadword) units needed for addq $X, %rsp after registers are filled
+    int words = parsedLine.size();
+    for (int i = 4; i < words; i++)
+    {
+        if (variableToRbp.count(parsedLine[i] + '0') == 1) //for array members
+        {
+            cout << "leaq   ";
+            cout << variableToRbp[(parsedLine[i] + '0')]; //address of first member of array
+            switch (functCallRegCounter)
+            {
+            case 0:
+                cout << ", %r9" << endl;
+                functCallRegCounter++;
+            case 1:
+                cout << ", %r8" << endl;
+                functCallRegCounter++;
+            case 2:
+                cout << ", %rcx" << endl;
+                functCallRegCounter++;
+            case 3:
+                cout << ", %rdx" << endl;
+                functCallRegCounter++;
+            case 4:
+                cout << ", %rsi" << endl;
+                functCallRegCounter++;
+            case 5:
+                cout << ", %rax" << endl; //temporary
+                functCallRegCounter++;
+            default:
+                cout << ", %rdi" << endl;
+                cout << "pushq   %rdi" << endl; //pushes additional variables to stack (always the whole quadword!)
+                functCallRedZoneCounter++;
+            }
+            cout << "movq   %rax, %rdi" << endl; //prepare for function call to return to %edi
+            i++;                                 //move to next parameter
+        }
+
+        else if (variableToRbp.count(parsedLine[i]) == 1) //for int parameters
+        {
+            cout << "movl   ";
+            cout << variableToRbp[(parsedLine[i])]; //address of int
+            switch (functCallRegCounter)
+            {
+            case 0:
+                cout << ", %r9d" << endl;
+                functCallRegCounter++;
+            case 1:
+                cout << ", %r8d" << endl;
+                functCallRegCounter++;
+            case 2:
+                cout << ", %ecx" << endl;
+                functCallRegCounter++;
+            case 3:
+                cout << ", %edx" << endl;
+                functCallRegCounter++;
+            case 4:
+                cout << ", %esi" << endl;
+                functCallRegCounter++;
+            case 5:
+                cout << ", %eax" << endl; //temporary
+                functCallRegCounter++;
+            default:
+                cout << ", %edi" << endl;
+                cout << "pushq   %rdi" << endl; //pushes additional variables to stack (the WHOLE quadword!)
+                functCallRedZoneCounter++;
+            }
+            cout << "movq   %eax, %edi" << endl; //prepare for function call to return to %edi
+        }
+    }
+    //begin function call
+    cout << "call   " << parsedLine[2] << endl;
+    if (functCallRedZoneCounter > 0)
+        cout << "addq   $" << functCallRedZoneCounter * 8 << ", %rsp" << endl; //rsp shift
+    cout << "movl   %eax, " << variableToRbp[0] << endl;                       //assigns return of function to variable
 }
 
 /**
@@ -121,7 +242,7 @@ void functionCall(vector<string> &parsedLine)
 */
 void detectStatement(vector<string> &parsedLine)
 {
-    //check if need to print jumpLabel before instructions
+    //check if need a jumpLabel before output instructions
     jumpLabel(outputLabel, isFalseResult);
 
     switch (parsedLine[0])
@@ -189,58 +310,33 @@ void variableDeclarations(vector<string> parsedLine)
 }
 
 /*
- When comparison result is false, jump to .false
+If Statement only cotains two conditions: a > b and a < b
+When comparison result is false, jump to .false_if
 */
 void ifStatement(vector<string> parsedLine)
 {
+
+    //check the variable type of a and b, print related instructions
     checkIfVarType(parsedLine);
 
-    //parsedLine[0] == if, paresdLine[1] == var1, paresdLine[2] == op, paresdLine[3] == var2
-    if (parsedLine.size() == 4)
-    {
+    //parsedLine[0] == if, paresdLine[1] == op1, paresdLine[2] == comparator, paresdLine[3] == op2
 
-        // a < b
-        if (parsedLine[2] == "<")
-        {
-            cout << "jge     .false" << endl;
-        }
-        // a > b
-        if (parsedLine[2] == ">")
-        {
-            cout << "jle     .false" << endl;
-        }
+    // a < b
+    if (parsedLine[2] == "<")
+    {
+        cout << "jge .false_if" << endl;
     }
-    //parsedLine[0] == if, paresdLine[1] == var1, paresdLine[2] == op1, paresdLine[3] == "=", pasedLine[4]== var2
-    else
+    // a > b
+    if (parsedLine[2] == ">")
     {
-
-        // a <= b
-        if (parsedLine[2] == "<")
-        {
-            cout << "jg    .false" << endl;
-        }
-        // a >= b
-        else if (parsedLine[2] == ">")
-        {
-            cout << "jl    .false" << endl;
-        }
-        // a != b
-        else if (parsedLine[2] == "!")
-        {
-            cout << "je     .false" << endl;
-        }
-        // a == b
-        else
-        {
-            cout << "jne     .false" << endl;
-        }
+        cout << "jle .false_if" << endl;
     }
 
     //note there is a jump label for the next two instruction
-    outputLabel = true;
+    isFalseResult = true;
 }
 
-//Check each operand of the ifstatement and output corresponding instruction
+//Check each operand type in the ifstatement and output corresponding instruction
 void checkIfVarType(vector<string> parsedLine)
 {
 
@@ -248,203 +344,164 @@ void checkIfVarType(vector<string> parsedLine)
     bool isArrayVar2 = false;
     int var1Index = 0;
     int var2Index = 0;
-    string arrayVar1, arrayVar2;
+    string arrayVar1 = "";
+    string arrayVar2 = "";
+    string arrayVar1_index = "";
+    string arrayVar2_index = "";
 
     //parsedLine[1],ParsedLine[3] are operands
-    if (parsedLine.size() == 4)
+
+    //check if op1 is a array variables
+    for (int i = 0; i < parsedLine[1].size(); i++)
     {
-        //check if op1 and op2 are array variables
-        for (int i = 0; i < parsedLine[1].size(); i++)
+        //note there is a array variable, store its index position
+        if (parsedLine[1][i] == '[')
         {
-            if (parsedLine[1][i] == '[')
-            {
-                isArrayVar1 = true;
-                var1Index = i + 1;
-            }
+            isArrayVar1 = true;
+            var1Index = i + 1;
         }
-        for (int j = 0; j < parsedLine[3].size(); j++)
+        //remove [] and store the array var string
+        if (parsedLine[1][i] != '[' || parsedLine[1][i] != ']')
         {
-            if (parsedLine[3][j] == '[')
-            {
-                isArrayVar2 = true;
-                var2Index = j + 1;
-            }
-        }
-
-        //op1 and op2 are not array variables
-        if (!isArrayVar1 && !isArrayVar2)
-        {
-            cout << "movl   " << variableToRbp[parsedLine[1]] << "(%rbp), %eax" << endl;
-
-            //if op2 is a number
-            if (isdigit(parsedLine[3]))
-            {
-                cout << "cmpl   "
-                     << "$" << parsedLine[3] << "(%rbp), %eax" << endl;
-            }
-            else
-            {
-                cout << "cmpl   " << variableToRbp[parsedLine[3]] << "(%rbp), %eax" << endl;
-            }
-        }
-        //op1 is a array variable, op2 is a number or variable
-        else if (isArrayVar1 && !isArrayVar2)
-        {
-            //arrayVar1 is the index number of the array variable
-            for (int i = var1Index; i < parsedLine[1].size() - 1; i++)
-            {
-                arrayVar1 = arrayVar1 + parsedLine[1][i];
-            }
-
-            cout << "movl " << variableToRbp[arrayVar1] << "(%rbp), %eax" << endl;
-            cout << "cltp" << endl;
-            cout << "movl " << variableToRbp[parsedLine[1]] << "(%rbp,%rax,4), %eax" << endl;
-
-            //if op2 is a number
-            if (isdigit(parsedLine[3]))
-            {
-                cout << "cmpl   "
-                     << "$" << parsedLine[3] << "(%rbp), %eax" << endl;
-            }
-            else
-            {
-                cout << "cmpl   " << variableToRbp[parsedLine[3]] << "(%rbp), %eax" << endl;
-            }
-        }
-        //op1 and op2 are array variables
-        else
-        {
-            //arrayVar1 is the index number of the array variable 1
-            for (int i = var1Index; i < parsedLine[1].size() - 1; i++)
-            {
-                arrayVar1 = arrayVar1 + parsedLine[1][i];
-            }
-
-            //print the array var1
-            cout << "movl " << variableToRbp[arrayVar1] << "(%rbp), %eax" << endl;
-            cout << "cltp" << endl;
-            cout << "movl " << variableToRbp[parsedLine[1]] << "(%rbp,%rax,4), %edx" << endl;
-
-            //arrayVar2 is the index number of the array variable 2
-            for (int j = var2Index; i < parsedLine[3].size() - 1; j++)
-            {
-                arrayVar2 = arrayVar2 + parsedLine[3][j];
-            }
-            //print array var2
-            cout << "movl " << variableToRbp[arrayVar2] << "(%rbp), %eax" << endl;
-            cout << "cltp" << endl;
-            cout << "movl " << variableToRbp[parsedLine[3]] << "(%rbp,%rax,4), %eax" << endl;
-            //compare op1 and op2
-            cout << "cmpl %edx, %eax" << endl;
+            arrayVar1 += parsedLine[1][i];
         }
     }
 
-    //parsedLine[1],ParsedLine[4] are operands
-    else
+    //check if op2 is a array variable
+    for (int j = 0; j < parsedLine[3].size(); j++)
     {
-
-        //check if op1 and op2 are array variables
-        for (int i = 0; i < parsedLine[1].size(); i++)
+        //note there is a array variable, store its index position
+        if (parsedLine[3][j] == '[')
         {
-            if (parsedLine[1][i] == '[')
-            {
-                isArrayVar1 = true;
-                var1Index = i + 1;
-            }
+            isArrayVar2 = true;
+            var2Index = j + 1;
         }
-        for (int j = 0; j < parsedLine[4].size(); j++)
+        //remove [] and store the array var string
+        if (parsedLine[3][j] != '[' || parsedLine[3][j] != ']')
         {
-            if (parsedLine[4][j] == '[')
-            {
-                isArrayVar2 = true;
-                var2Index = j + 1;
-            }
+            arrayVar2 += parsedLine[3][j];
         }
+    }
 
-        //op1 and op2 are not array variables
-        if (!isArrayVar1 && !isArrayVar2)
+    //op1 and op2 are not array variables
+    if (!isArrayVar1 && !isArrayVar2)
+    {
+        cout << "movl " << variableToRbp[parsedLine[1]] << "(%rbp), %eax" << endl;
+
+        //if op2 is a number
+        if (isdigit(parsedLine[3]))
         {
-            cout << "movl   " << variableToRbp[parsedLine[1]] << "(%rbp), %eax" << endl;
-
-            //if op2 is a number
-            if (isdigit(parsedLine[4]))
-            {
-                cout << "cmpl   "
-                     << "$" << parsedLine[4] << "(%rbp), %eax" << endl;
-            }
-            else
-            {
-                cout << "cmpl   " << variableToRbp[parsedLine[4]] << "(%rbp), %eax" << endl;
-            }
+            cout << "cmpl "
+                 << "$" << parsedLine[3] << "(%rbp), %eax" << endl;
         }
-        //op1 is a array variable, op2 is a number or variable
-        else if (isArrayVar1 && !isArrayVar2)
-        {
-            //arrayVar1 is the index number of the array variable
-            for (int i = var1Index; i < parsedLine[1].size() - 1; i++)
-            {
-                arrayVar1 = arrayVar1 + parsedLine[1][i];
-            }
-
-            cout << "movl " << variableToRbp[arrayVar1] << "(%rbp), %eax" << endl;
-            cout << "cltp" << endl;
-            cout << "movl " << variableToRbp[parsedLine[1]] << "(%rbp,%rax,4), %eax" << endl;
-
-            //if op2 is a number
-            if (isdigit(parsedLine[4]))
-            {
-                cout << "cmpl   "
-                     << "$" << parsedLine[4] << "(%rbp), %eax" << endl;
-            }
-            else
-            {
-                cout << "cmpl   " << variableToRbp[parsedLine[4]] << "(%rbp), %eax" << endl;
-            }
-        }
-        //op1 and op2 are array variables
         else
         {
-            //arrayVar1 is the index number of the array variable 1
-            for (int i = var1Index; i < parsedLine[1].size() - 1; i++)
-            {
-                arrayVar1 = arrayVar1 + parsedLine[1][i];
-            }
-
-            //print the array var1
-            cout << "movl " << variableToRbp[arrayVar1] << "(%rbp), %eax" << endl;
-            cout << "cltp" << endl;
-            cout << "movl " << variableToRbp[parsedLine[1]] << "(%rbp,%rax,4), %edx" << endl;
-
-            //arrayVar2 is the index number of the array variable 2
-            for (int j = var2Index; i < parsedLine[4].size() - 1; j++)
-            {
-                arrayVar2 = arrayVar2 + parsedLine[4][j];
-            }
-            //print array var2
-            cout << "movl " << variableToRbp[arrayVar2] << "(%rbp), %eax" << endl;
-            cout << "cltp" << endl;
-            cout << "movl " << variableToRbp[parsedLine[4]] << "(%rbp,%rax,4), %eax" << endl;
-            //compare op1 and op2
-            cout << "cmpl %edx, %eax" << endl;
+            cout << "cmpl " << variableToRbp[parsedLine[3]] << "(%rbp), %eax" << endl;
         }
+    }
+
+    //op1 is a array variable, op2 is a number or variable
+    else if (isArrayVar1 && !isArrayVar2)
+    {
+        //arrayVar1 is the index number of the array variable
+        for (int i = var1Index; i < parsedLine[1].size() - 1; i++)
+        {
+            arrayVar1_index += parsedLine[1][i];
+        }
+
+        cout << "movl " << variableToRbp[arrayVar1_index] << "(%rbp), %eax" << endl;
+        cout << "cltp" << endl;
+        cout << "movl " << variableToRbp[arrayVar1] << "(%rbp,%rax,4), %eax" << endl;
+
+        //if op2 is a number
+        if (isdigit(parsedLine[3]))
+        {
+            cout << "cmpl "
+                 << "$" << parsedLine[3] << "(%rbp), %eax" << endl;
+        }
+        else
+        {
+            cout << "cmpl " << variableToRbp[parsedLine[3]] << "(%rbp), %eax" << endl;
+        }
+    }
+
+    //op1 and op2 are both array variables
+    else
+    {
+        //arrayVar1 is the index number of the array variable 1
+        for (int i = var1Index; i < parsedLine[1].size() - 1; i++)
+        {
+            arrayVar1_index += parsedLine[1][i];
+        }
+
+        //print the array var1
+        cout << "movl " << variableToRbp[arrayVar1_index] << "(%rbp), %eax" << endl;
+        cout << "cltp" << endl;
+        cout << "movl " << variableToRbp[arrayVar1] << "(%rbp,%rax,4), %edx" << endl;
+
+        //arrayVar2 is the index number of the array variable 2
+        for (int j = var2Index; j < parsedLine[3].size() - 1; j++)
+        {
+            arrayVar2_index += parsedLine[3][j];
+        }
+
+        //print array var2
+        cout << "movl " << variableToRbp[arrayVar2_index] << "(%rbp), %eax" << endl;
+        cout << "cltp" << endl;
+        cout << "movl " << variableToRbp[arrayVar2] << "(%rbp,%rax,4), %eax" << endl;
+
+        //compare op1 and op2
+        cout << "cmpl %edx, %eax" << endl;
     }
 }
 
-//print the jumpLabel if there is a false result
+//print the jumpLabel for the ifstatement when there is a false result
 void jumpLabel(bool outputLabel, bool isFalseResult)
 {
 
     //output the jumpLabel for the next instruction
-    if (outputLabel && !isFalseResult)
+    if (!outputLabel && isFalseResult)
     {
-        isFalseResult = true;
+        outputLabel = true;
     }
     //output the jumpLabel
     else if (outputLabel && isFalseResult)
     {
-        cout << ".false" << endl;
+        cout << ".false_if" << endl;
         outputLabel = false;
         isFalseResult = false;
+    }
+}
+
+void forStatement(vector<string> parsedLine)
+{
+
+    //remove "for" from the initialization
+    vector<string> initialStr;
+    for (int i = 1; i < parsedLine.size(); i++)
+    {
+        initialStr.push_back(parsedLine[i]);
+    }
+
+    variableOrFunctionDec(initialStr);
+    for_startComparison = true;
+}
+
+void startComparison(vector<string> parsedLine, bool a)
+{
+
+    cout << ".starting_of_comparison" << numOfCmpl << endl;
+    cout << "movl " << variableToRbp[parsedLine[0]] << "(%rbp), %eax" << endl;
+    cout << "cmpl "
+         << "$" << parsedLine[2] << ", %eax" << endl;
+
+    if (parsedLine[1] == "<")
+    {
+        cout << "jge .false_for" << numOf endl;
+    }
+    else if (parsedLine[1] == ">")
+    {
+        cout << "jle .false_for" << endl;
     }
 }
 
@@ -453,14 +510,14 @@ void returnStatement(vector<string> parsedLine)
     //return a specific number
     if (isdigit(parsedLine[1]))
     {
-        cout << "movl    "
-             << "$" << parsedLine[1] << ",%eax" << endl;
+        cout << "movl "
+             << "$" << parsedLine[1] << ", %eax" << endl;
     }
     //return the value of variable
     else
     {
-        cout << "movl     " << variableToRbp[parsedLine[1]] << "(%rbp)"
-             << ",%eax" << endl;
+        cout << "movl " << variableToRbp[parsedLine[1]] << "(%rbp)"
+             << ", %eax" << endl;
     }
 }
 

@@ -1,6 +1,5 @@
 int main()
 {
-    int a = 0, b = 1;
-    int c[3]={10,74,80};
-    a = c[a]-b;
+    int a = 6, b = 0, c = 0;
+    a = b;
 }
