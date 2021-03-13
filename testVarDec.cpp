@@ -21,10 +21,24 @@ void iterateMap()
     }
     cout << '\n';
 }
-//[0] = dest, [1] = '=', [2] = op1, [3] = operation, [4] = op2
+
+/**
+ * Cases Considered: 
+ * a = b;
+ * a = b + c;
+ * a = b - c;
+ * a = b * c;
+*/
 void arithmeticOperation(vector<string> parsedLine)
 {
-    if (parsedLine[3] == "*")
+    std::string opCode;
+    parsedLine[3] == "+" ? opCode = "addl" : opCode = "subl";
+    if (parsedLine.size() < 4)
+    {
+        cout << "movl " << variableToRbp[parsedLine[2]] << ", %eax\n";
+        cout << "movl %eax, " << variableToRbp[parsedLine[0]] << "\n";
+    }
+    else if (parsedLine[3] == "*")
     {
         cout << "movl " << variableToRbp[parsedLine[2]] << ", %eax\n";
         cout << "imull " << variableToRbp[parsedLine[4]] << ", %eax\n";
@@ -32,13 +46,10 @@ void arithmeticOperation(vector<string> parsedLine)
              << "%eax, " << variableToRbp[parsedLine[0]] << '\n';
         return;
     }
-    std::string opCode;
-    parsedLine[3] == "+" ? opCode = "addl" : opCode = "subl";
-
-    if (!opCode.empty())
+    else if (!opCode.empty())
     {
-        cout << "movl " << variableToRbp[parsedLine[2]] << ", %edx\n";
-        cout << "movl " << variableToRbp[parsedLine[4]] << ", %eax\n";
+        cout << "movl " << variableToRbp[parsedLine[2]] << ", %eax\n";
+        cout << "movl " << variableToRbp[parsedLine[4]] << ", %edx\n";
         cout << opCode << " %edx, %eax\n";
         cout << "movl "
              << "%eax, " << variableToRbp[parsedLine[0]] << '\n';
@@ -55,11 +66,32 @@ bool isAdd(vector<string> parsedLine)
     return false;
 }
 
+/**
+ * Cases Considered: 
+ * c[a] = c[b];
+ * a = a + d[b];
+ * a = d[b] + a;
+ * a = a + d[num];
+ * a = d[num] + a;
+ * a = d[b]
+*/
 void arithOpWithArr(vector<string> parsedLine)
 {
     std::string opCode;
     isAdd(parsedLine) == true ? opCode = "addl" : opCode = "subl";
-    if (parsedLine[5] == "[" && !isdigit(parsedLine[6][0]))
+
+    //c[a] = c[b];
+    if ((parsedLine[1] == "[" && !isdigit(parsedLine[2][0])) && (parsedLine[6] == "[" && !isdigit(parsedLine[7][0]) && parsedLine.size() < 10))
+    {
+        cout << "movl " << variableToRbp[parsedLine[7]] << ", %eax\n";
+        cout << "cltq\n";
+        cout << "movl " << variableToRbp[parsedLine[5] + "counter"] << "(%rbp,%rax,4), %edx\n";
+        cout << "movl " << variableToRbp[parsedLine[2]] << ", %eax\n";
+        cout << "cltq\n";
+        cout << "%edx, " << variableToRbp[parsedLine[0] + "counter"] << "(%rbp,%rax,4)\n";
+    }
+    //a = a + d[b];
+    else if (parsedLine[5] == "[" && !isdigit(parsedLine[6][0]))
     {
         cout << "movl " << variableToRbp[parsedLine[6]] << ", %eax\n";
         cout << "cltq\n";
@@ -69,16 +101,21 @@ void arithOpWithArr(vector<string> parsedLine)
         cout << "movl "
              << "%eax," << variableToRbp[parsedLine[0]] << '\n';
     }
+    //a = d[b] + a;
     else if (parsedLine[3] == "[" && !isdigit(parsedLine[4][0]))
     {
         cout << "movl " << variableToRbp[parsedLine[4]] << ", %eax\n";
         cout << "cltq\n";
-        cout << "movl " << variableToRbp[parsedLine[2] + "counter"] << "(%rbp,%rax,4), %edx\n";
-        cout << "movl " << variableToRbp[parsedLine[7]] << ", %eax\n";
-        cout << opCode << " %edx, %eax\n";
+        cout << "movl " << variableToRbp[parsedLine[2] + "counter"] << "(%rbp,%rax,4), %eax\n";
+        if (parsedLine.size() > 6)
+        {
+            cout << "movl " << variableToRbp[parsedLine[7]] << ", %edx\n";
+            cout << opCode << " %edx, %eax\n";
+        }
         cout << "movl "
              << "%eax," << variableToRbp[parsedLine[0]] << '\n';
     }
+    //a = a + d[num];
     else if (parsedLine[5] == "[")
     {
         cout << "movl " << variableToRbp[parsedLine[4] + parsedLine[6]] << ", %edx\n";
@@ -87,19 +124,20 @@ void arithOpWithArr(vector<string> parsedLine)
         cout << "movl "
              << "%eax," << variableToRbp[parsedLine[0]] << '\n';
     }
+    //a = d[num] + a;
     else if (parsedLine[3] == "[")
     {
-        cout << "movl " << variableToRbp[parsedLine[2] + parsedLine[4]] << ", %edx\n";
-        cout << "movl " << variableToRbp[parsedLine[7]] << ", %eax\n";
+        cout << "movl " << variableToRbp[parsedLine[2] + parsedLine[4]] << ", %eax\n";
+        cout << "movl " << variableToRbp[parsedLine[7]] << ", %edx\n";
         cout << opCode << " %edx, %eax\n";
         cout << "movl "
              << "%eax," << variableToRbp[parsedLine[0]] << '\n';
     }
 }
 
+//returns a vector containing only alphanumeric values
 vector<string> filterVec(vector<string> parsedLine)
 {
-    //only variables and their associated value will be in the array
     vector<string> temp;
     for (const auto &word : parsedLine)
     {
@@ -122,17 +160,26 @@ void variableDeclarations(vector<string> parsedLine)
     }
 }
 
+/**
+ * Maps array[index]: value in variableToRbp
+ * Access elements through concatenating array name + index
+ * E.g., To assign the value of array A at index 0 - 
+ * you would do something like int b = variableToRbp[A0];
+*/
 void arrayDeclartion(vector<string> parsedLine)
 {
+    //subtract 1 b/c address at current offset not yet used
+    //offset starts at 1
+    offset += stoi(parsedLine[3]) - 1;
     vector<string> temp = filterVec(parsedLine);
-    offset += stoi(temp[2]) - 1;
     int tempOffset = offset;
-    variableToRbp[parsedLine[1] + "counter"] = to_string(offset * -4 - 4);
-    for (int i = 3, counter = offset * -4 - 4, j = 0; i < temp.size(); ++i, counter += 4, ++j)
+    variableToRbp[parsedLine[1] + "counter"] = to_string(offset * -4);
+    for (int i = 3, counter = offset * -4, j = 0; i < temp.size(); ++i, counter += 4, ++j)
     {
         cout << "movl $" << temp[i] << ", " << counter << "(%rbp)\n";
         variableToRbp[temp[1] + to_string(j)] = to_string(counter) + "(%rbp)";
     }
+    offset++;
 }
 
 void parse(const string &line)
@@ -140,9 +187,11 @@ void parse(const string &line)
     vector<string> parsedLine;
     string word;
     bool isArray = false;
+    bool isDeclaration = false;
+
     for (const auto &letter : line)
     {
-        if (isalnum(letter))
+        if (isalnum(letter) || letter == '_')
         {
             word += letter;
         }
@@ -172,6 +221,8 @@ void parse(const string &line)
         }
         else if (isArray && (letter == '{' || letter == '}'))
         {
+            if (letter == '{')
+                isDeclaration = true;
             if (!word.empty())
                 parsedLine.push_back(word);
             parsedLine.push_back(string(1, letter));
@@ -180,11 +231,11 @@ void parse(const string &line)
     }
     if (!parsedLine.empty())
     {
-        if (parsedLine[2] == "[")
+        if (isArray && isDeclaration)
         {
             arrayDeclartion(parsedLine);
         }
-        else if (parsedLine[3] == "[" || parsedLine[5] == "[")
+        else if (parsedLine[3] == "[" || parsedLine[5] == "[" || parsedLine[1] == "[")
         {
             arithOpWithArr(parsedLine);
         }
@@ -205,7 +256,7 @@ void readFile(const string &txtFile)
     ifstream textFile(txtFile);
     while (getline(textFile, line))
     {
-        if (line.empty() || line == "{" || line == "}")
+        if (line.empty())
             continue;
         parse(line);
     }
