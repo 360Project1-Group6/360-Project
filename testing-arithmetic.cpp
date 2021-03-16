@@ -228,7 +228,7 @@ void functionCall(vector<string> &parsedLine)
                 cout << "pushq   %rdi" << endl; //pushes additional variables to stack (the WHOLE quadword!)
                 functCallRedZoneCounter++;
             }
-            cout << "movq   %eax, %edi" << endl; //prepare for function call to return to %edi
+            cout << "movq   %eax, %edi" << endl; //prepare for function call to return to %eax
         }
     }
     //begin function call

@@ -12,6 +12,7 @@ using namespace std;
 //keep track of the varibles and their corresponding location to their rbp
 map<string, string> variableToRbp;
 int offset = 1;
+char comparator;
 
 void iterateMap()
 {
@@ -205,7 +206,7 @@ void parse(const string &line)
                 parsedLine.push_back(word);
             word = "";
         }
-        else if (letter == '=' || letter == '+' || letter == '-' || letter == '*' || letter == '[' || letter == ']')
+        else if (letter == '=' || letter == '+' || letter == '-' || letter == '*' || letter == '[' || letter == ']' || letter == '{' || letter == '}')
         {
             if (letter == '[')
             {
@@ -215,16 +216,9 @@ void parse(const string &line)
             {
                 parsedLine.push_back(word);
             }
-            //covert char to string before pushing to vector
-            parsedLine.push_back(string(1, letter));
-            word = "";
-        }
-        else if (isArray && (letter == '{' || letter == '}'))
-        {
             if (letter == '{')
                 isDeclaration = true;
-            if (!word.empty())
-                parsedLine.push_back(word);
+            //covert char to string before pushing to vector
             parsedLine.push_back(string(1, letter));
             word = "";
         }
