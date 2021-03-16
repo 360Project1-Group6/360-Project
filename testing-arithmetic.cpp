@@ -23,13 +23,15 @@ bool redZoneBreak = false; // if function breaks redzone (more than 128 bytes us
 int openBracket = 0;       // keeps track of # of nested statements
 
 //check if there is jump Label
-bool outputLabel = false;
-bool isFalseResult = false;
+bool isFalseResult_if = false;
+int closeBracket = 0;
 
 //note the start position of comparison in for statement
-bool for_startComparison = false;
-int numOfCmpl = 1;
-int numOfResult_For = 1;
+int numOfCmpl = 0;
+bool isCmpl = false;
+bool isIncrement = false;
+vector<string> incrementStr;
+bool isFalseResult_for = false;
 
 //////////////////////////
 // FUNCTIONS............//
@@ -242,13 +244,45 @@ void functionCall(vector<string> &parsedLine)
 */
 void detectStatement(vector<string> &parsedLine)
 {
+
+    findCloseBracket(parsedLine);
     //check if need a jumpLabel before output instructions
-    jumpLabel(outputLabel, isFalseResult);
+    //print the jumpLabel for the ifstatement when there is a false result
+    if (isFalseResult_if && (closeBracket > 0))
+    {
+        cout << ".False_if" << endl;
+        isFalseResult_if = false;
+        closeBracket--;
+    }
 
     //check if need a comparison label for the forStatement
-    if (for_startComparison)
+    if (isCmpl)
     {
-        startComparison(parsedLine, for_startComparison);
+        compare_for(parsedLine);
+        isCmpl = false;
+        break;
+    }
+
+    if (isIncrement)
+    {
+        increment(parsedLine);
+        isIncrement = false;
+        break;
+    }
+
+    if (isFalseResult_for && (closeBracket > 0))
+    {
+        cout << incrementStr[numOfCmpl - 1] << endl;
+        cout << "jmp .compare" << numOfCmpl << endl;
+        cout << ".false_for" << numOfCmpl << endl;
+
+        numOfCmpl--;
+        closeBracket--;
+
+        if (numOfCmpl == 0)
+        {
+            isFalseResult_for = "false";
+        }
     }
 
     switch (parsedLine[0])
@@ -290,6 +324,17 @@ void variableOrFunctionDec(vector<string> &parsedLine)
 void closeBracket(vector<string> &parsedLine)
 {
     openBracket--;
+}
+
+void findCloseBracket(vector<string> parsedLine)
+{
+    for (int i = 0; i < parsedLine.size(); i++)
+    {
+        if (parsedLine[i] == "}")
+        {
+            closeBracket++;
+        }
+    }
 }
 
 void arithmeticOrFunctionCall(vector<string> &parsedLine)
@@ -339,7 +384,7 @@ void ifStatement(vector<string> parsedLine)
     }
 
     //note there is a jump label for the next two instruction
-    isFalseResult = true;
+    isFalseResult_if = true;
 }
 
 //Check each operand type in the ifstatement and output corresponding instruction
@@ -461,69 +506,75 @@ void checkIfVarType(vector<string> parsedLine)
     }
 }
 
-//print the jumpLabel for the ifstatement when there is a false result
-void jumpLabel(bool outputLabel, bool isFalseResult)
-{
+// //print the jumpLabel for the ifstatement when there is a false result
+// void jumpLabel(bool outputLabel, bool isFalseResult)
+// {
 
-    //output the jumpLabel for the next instruction
-    if (!outputLabel && isFalseResult)
-    {
-        outputLabel = true;
-    }
-    //output the jumpLabel
-    else if (outputLabel && isFalseResult)
-    {
-        cout << ".false_if" << endl;
-        outputLabel = false;
-        isFalseResult = false;
-    }
-}
+//     //output the jumpLabel for the next instruction
+//     if (!outputLabel && isFalseResult)
+//     {
+//         outputLabel = true;
+//     }
+//     //output the jumpLabel
+//     else if (outputLabel && isFalseResult)
+//     {
+//         cout << ".false_if" << endl;
+//         outputLabel = false;
+//         isFalseResult = false;
+//     }
+// }
 
 void forStatement(vector<string> parsedLine)
 {
 
-    //remove "for" from the initialization line
-    vector<string> initialStr;
-    for (int i = 1; i < parsedLine.size(); i++)
+    //for int i = 0;
+    if (parsedLine.size() == 4)
     {
-        initialStr.push_back(parsedLine[i]);
+        cout << "movl " << '$' << parsedLine[4] << ", " << variableToRbp[parsedLine[2]] << "(%rbp)" << endl;
+    }
+    //j = i + 1
+    else
+    {
+        cout << "movl " << variableToRbp[parsedLine[2]] << "(%rbp), %eax" << endl;
+        cout << "addl $" << parsedLine[4] << ", %eax" << endl;
+        cout << "movl "
+             << "%eax, " << variableToRbp[parsedLine[0]] << "(%rbp)" << endl;
     }
 
-    //initial index value of for statement
-    variableOrFunctionDec(initialStr);
-    for_startComparison = true;
+    numOfCmpl++;
+
+    cout << ".compare" << numOfCmpl << endl;
+
+    isCmpl = true;
 }
 
 /*
 
 */
-void startComparison(vector<string> parsedLine, bool startCmpl)
+void compare_for(vector<string> parsedLine)
 {
-    if (startCmpl)
+
+    cout << "movl " << variableToRbp[parsedLine[0]] << ", %eax" << endl;
+    cout << "cmpl "
+         << "$" << parsedLine[2] << ", %eax" << endl;
+
+    if (parsedLine[1] == "<")
     {
-        //Output the comparison label
-        cout << ".starting_of_comparison" << numOfCmpl << endl;
-        numOfCmpl++;
-
-        cout << "movl " << variableToRbp[parsedLine[0]] << "(%rbp), %eax" << endl;
-        cout << "cmpl "
-             << "$" << parsedLine[2] << ", %eax" << endl;
-
-        // a < int
-        if (parsedLine[1] == "<")
-        {
-            cout << "jge .false_for" << numOfResult_For << endl;
-            numOfResult_For++;
-        }
-        //a > int
-        else if (parsedLine[1] == ">")
-        {
-            cout << "jle .false_for" << numOfResult_For << endl;
-            numOfResult_For++;
-        }
-
-        startCmpl = false;
+        cout << "jge .false_for" << numOfCmpl << endl;
     }
+    else
+    {
+        cout << "jle .false_for" << numOfCmpl << endl;
+    }
+    isIncrement = true;
+}
+
+void increment(vector<string> parsedLine)
+{
+    //a++
+    string temp = "addl $1, " + variableToRbp[parsedLine[0]];
+    incrementStr.push_back(temp);
+    isFalseResult_for = true;
 }
 
 void returnStatement(vector<string> parsedLine)

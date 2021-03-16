@@ -1,0 +1,12 @@
+int test(int a, int b){
+    int i=0;
+    i=a*b;
+    return i;
+}
+
+int main(){
+    int a=1,b=2;
+    int i=0;
+    i=test(a,b);
+    return 0;
+}

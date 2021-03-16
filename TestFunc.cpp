@@ -13,14 +13,6 @@ using namespace std;
 map<string, string> variableToRbp;
 int offset = 1;
 
-/*********************************************      INSERT CODE HERE        *****************************************************************
-
-
-
-
-
-*********************************************************************************************************************************************/
-
 void iterateMap()
 {
     for (const auto &x : variableToRbp)
@@ -190,6 +182,10 @@ void arrayDeclartion(vector<string> parsedLine)
     offset++;
 }
 
+/**
+ * Variable Name will be only alphamueric and can only contain the special character '_'
+ * Characters ';', ',', '{', '(' and ')' will not be passed into the vector
+*/
 void parse(const string &line)
 {
     vector<string> parsedLine;
@@ -269,6 +265,14 @@ void readFile(const string &txtFile)
         parse(line);
     }
 }
+
+/*********************************************      INSERT CODE HERE        *****************************************************************
+
+
+
+
+
+*********************************************************************************************************************************************/
 
 int main(int argc, char **argv)
 {

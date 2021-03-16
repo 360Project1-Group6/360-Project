@@ -13,14 +13,6 @@ using namespace std;
 map<string, string> variableToRbp;
 int offset = 1;
 
-/*********************************************      INSERT CODE HERE        *****************************************************************
-
-
-
-
-
-*********************************************************************************************************************************************/
-
 void iterateMap()
 {
     for (const auto &x : variableToRbp)
@@ -28,6 +20,87 @@ void iterateMap()
         cout << "key: " << x.first << " Value: " << x.second << ' ';
     }
     cout << '\n';
+}
+
+//Tracking the # of comparison in for loop
+int numOfCmpl = 0;
+bool isCmpl = false;
+
+//store the increment instruction before print the false label
+vector<string> incrementStr;
+bool isIncrement = false;
+bool isFalseResult_for = false;
+
+//count the # of close bracket
+int closeBracket = 0;
+
+//Find the close bracket for printing labels
+void findCloseBracket(vector<string> parsedLine)
+{
+    for (int i = 0; i < parsedLine.size(); i++)
+    {
+        if (parsedLine[i] == "}")
+        {
+            closeBracket++;
+        }
+    }
+}
+
+//For statement step1: initial the index
+void forStatement(vector<string> parsedLine)
+{
+    //int i = 0;
+    if (parsedLine.size() == 4)
+    {
+        cout << "movl " << '$' << parsedLine[4] << ", " << variableToRbp[parsedLine[2]] << "(%rbp)" << endl;
+    }
+    //int j = i + 1
+    else
+    {
+        cout << "movl " << variableToRbp[parsedLine[2]] << "(%rbp), %eax" << endl;
+        cout << "addl $" << parsedLine[4] << ", %eax" << endl;
+        cout << "movl "
+             << "%eax, " << variableToRbp[parsedLine[0]] << "(%rbp)" << endl;
+    }
+
+    numOfCmpl++;
+
+    cout << ".compare" << numOfCmpl << endl;
+
+    isCmpl = true;
+}
+
+/*for statement step2: compare
+* compare two object and print the jump instruction
+*/
+void compare_for(vector<string> parsedLine)
+{
+
+    cout << "movl " << variableToRbp[parsedLine[0]] << ", %eax" << endl;
+    cout << "cmpl "
+         << "$" << parsedLine[2] << ", %eax" << endl;
+
+    if (parsedLine[1] == "<")
+    {
+        cout << "jge .false_for" << numOfCmpl << endl;
+    }
+    else
+    {
+        cout << "jle .false_for" << numOfCmpl << endl;
+    }
+    isIncrement = true;
+}
+
+/*
+*for statement step3: increse the index
+*store the increment string until false label appear
+*/
+void increment(vector<string> parsedLine)
+{
+    //a++
+    string temp = "addl $1, " + variableToRbp[parsedLine[0]];
+    incrementStr.push_back(temp);
+    isFalseResult_for = true;
 }
 
 /**
@@ -190,6 +263,10 @@ void arrayDeclartion(vector<string> parsedLine)
     offset++;
 }
 
+/**
+ * Variable Name will be only alphamueric and can only contain the special character '_'
+ * Characters ';', ',', '{', '(' and ')' will not be passed into the vector
+*/
 void parse(const string &line)
 {
     vector<string> parsedLine;
@@ -239,6 +316,35 @@ void parse(const string &line)
     }
     if (!parsedLine.empty())
     {
+        findCloseBracket(parsedLine);
+
+        if (isCmpl)
+        {
+            compare_for(parsedLine);
+            isCmpl = false;
+        }
+        if (isIncrement)
+        {
+            increment(parsedLine);
+            isIncrement = false;
+        }
+
+        //print the false label
+        if (isFalseResult_for && (closeBracket > 0))
+        {
+            cout << incrementStr[numOfCmpl - 1] << endl;
+            cout << "jmp .compare" << numOfCmpl << endl;
+            cout << ".false_for" << numOfCmpl << endl;
+
+            numOfCmpl--;
+            closeBracket--;
+
+            if (numOfCmpl == 0)
+            {
+                isFalseResult_for = "false";
+            }
+        }
+
         if (isArray && isDeclaration)
         {
             arrayDeclartion(parsedLine);
@@ -254,6 +360,10 @@ void parse(const string &line)
         else if (parsedLine[1] == "=")
         {
             arithmeticOperation(parsedLine);
+        }
+        else if (parsedLine[0] == "for")
+        {
+            forStatement(parsedLine);
         }
     }
 }
