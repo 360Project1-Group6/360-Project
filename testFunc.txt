@@ -1,12 +1,6 @@
-int test(int a, int b){
-    int i=0;
-    i=a*b;
-    return i;
-}
-
 int main(){
-    int a=1,b=2;
-    int i=0;
-    i=test(a,b);
-    return 0;
+	int a[5]={10,74,54,46,7};
+	int min_inx = 0;
+    int temp = a[min_inx];
+    
 }

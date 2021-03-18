@@ -15,12 +15,13 @@ using namespace std;
 //keep track of the variables and their corresponding location to their rbp
 map<string, string> variableToRbp;
 int offset = 1;
-int functionOffset = 1;
 
+int functionOffset = 1;    //counts offset for functions during function declaration
 int regCount = 0;          //counts # of registers in use
 int redZoneCount = 0;      //counts amount of Red Zone used in units of 4 bytes
 bool redZoneBreak = false; // if function breaks redzone (more than 128 bytes used), then redZoneBreak = true.
 int openBracket = 0;       // keeps track of # of nested statements
+int functCount = 0;        // keeps track of how many functions exist besides main()
 
 //check if there is jump Label
 bool isFalseResult_if = false;
@@ -36,67 +37,67 @@ bool isFalseResult_for = false;
 //////////////////////////
 // FUNCTIONS............//
 //////////////////////////
-
 //int test(int a[1], int b, int c[3]) {
 void functionDeclaration(vector<string> &parsedLine)
 {
     //this is the epilogue for test(), for when we enter main(). We must print out the epilogue for test() if it exists.
-    if (redZoneBreak)
-        cout << "popq %rbp" << '\n'
+    if (redZoneBreak && functCount > 0)
+        cout << "popq   %rbp" << '\n'
              << "leave" << endl;
-    else
-        cout << "popq %rbp" << '\n'
+    else if (functCount > 0)
+        cout << "popq   %rbp" << '\n'
              << "ret" << endl;
-
-    functionOffset = 1;   //resets functionOffset
-    regCount = 0;         //resets registers
-    redZoneCount = 0;     //resets redzone data usage counter
-    redZoneBreak = false; //resets redzone break detection
-
-    int words = parsedLine.size(); //gives me a warning if I don't do this...?
 
     //label
     cout << parsedLine[1] << ":" << endl;
 
     //prologue
-    cout << "pushq %rbp" << '\n'
-         << "movq %rsp, %rbp" << endl;
+    cout << "pushq   %rbp" << '\n'
+         << "movq   %rsp, %rbp" << endl;
 
-    //printing...
-    for (int i = 3; i < words; i++)
+    if (regCount == 5) //this is for main() in the case of existence of leaf functions (test1)
+        cout << "subq   $64, %rsp" << endl;
+
+    functionOffset = 1;   //resets functionOffset
+    regCount = 0;         //resets registers
+    redZoneCount = 0;     //resets redzone data usage counter
+    redZoneBreak = false; //resets redzone break detection
+    functCount++;         //function counter updated
+
+    int words = parsedLine.size(); //gives me a warning if I don't do this...?
+
     {
         if (parsedLine[i] == "int" && parsedLine[i + 2] == "[") //if parameter is member of array...
         {
-            cout << "movq   ";
             switch (regCount) //if registers are available
             {
             case 0:
-                cout << "%rdi, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                cout << "movq   %rdi, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
                 functionOffset += 2;
                 regCount++;
                 break;
             case 1:
-                cout << "%rsi, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                cout << "movq   %rsi, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
                 functionOffset += 2;
                 regCount++;
                 break;
             case 2:
-                cout << "%rdx, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                cout << "movq   %rdx, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
                 functionOffset += 2;
                 regCount++;
                 break;
             case 3:
-                cout << "%rcx, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                cout << "movq   %rcx, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
                 functionOffset += 2;
                 regCount++;
                 break;
             case 4:
-                cout << "%r8, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                cout << "movq    %r8, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
                 functionOffset += 2;
                 regCount++;
                 break;
             case 5:
-                cout << "%r9, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                cout << "movq    %r9, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
                 functionOffset += 2;
                 regCount++;
                 break;
@@ -108,36 +109,35 @@ void functionDeclaration(vector<string> &parsedLine)
         }
         else if (parsedLine[i] == "int") //parameter is a regular int variable
         {
-            cout << "movl   ";
             switch (regCount) //if registers are available
             {
             case 0:
-                cout << "%edi, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                cout << "movl   %edi, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
                 functionOffset += 1;
                 regCount++;
                 break;
             case 1:
-                cout << "%esi, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                cout << "movl   %esi, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
                 functionOffset += 1;
                 regCount++;
                 break;
             case 2:
-                cout << "%edx, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                cout << "movl   %edx, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
                 functionOffset += 1;
                 regCount++;
                 break;
             case 3:
-                cout << "%ecx, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                cout << "movl   %ecx, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
                 functionOffset += 1;
                 regCount++;
                 break;
             case 4:
-                cout << "%r8d, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                cout << "movl   %r8d, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
                 functionOffset += 1;
                 regCount++;
                 break;
             case 5:
-                cout << "%r9d, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
+                cout << "movl   %r9d, " << -4 * functionOffset - 16 << "(%rbp)" << endl;
                 functionOffset += 1;
                 regCount++;
                 break;
@@ -158,8 +158,7 @@ void functionDeclaration(vector<string> &parsedLine)
     }
 }
 
-//i = test(a, b, c, d)
-// if parameter is int, use movl X(%register). if it is array member, use leaq Y(%register), where Y is lowest offset in array (ie offset of first element in array)
+/// if parameter is int, use movl X(%register). if it is array member, use leaq Y(%register), where Y is lowest offset in array (ie offset of first element in array)
 void functionCall(vector<string> &parsedLine)
 {
     int functCallRegCounter = 0;     //counts # of registers used in function call
@@ -321,6 +320,18 @@ void variableOrFunctionDec(vector<string> &parsedLine)
         throw std::invalid_argument("parsedLine[2] is not '=' or '('. Unable to understand statement");
 }
 
+void arithmeticOrFunctionCall(vector<string> &parsedLine)
+{
+    enum arithmeticSigns('+', '-', '*');
+
+    if (parsedLine[3] == "(")
+        functionCall(parsedLine);
+    else if (parsedLine[3] == arithmeticSigns)
+        arithmeticStatement(parsedLine);
+    else
+        throw std::invalid_argument("parsedLine[3] is not '(' or '+' , '-', '*'. Unable to understand statement");
+}
+
 void closeBracket(vector<string> &parsedLine)
 {
     openBracket--;
@@ -335,18 +346,6 @@ void findCloseBracket(vector<string> parsedLine)
             closeBracket++;
         }
     }
-}
-
-void arithmeticOrFunctionCall(vector<string> &parsedLine)
-{
-    enum arithmeticSigns('+', '-', '*');
-
-    if (parsedLine[3] == "(")
-        functionCall(parsedLine);
-    else if (parsedLine[3] == arithmeticSigns)
-        arithmeticStatement(parsedLine);
-    else
-        throw std::invalid_argument("parsedLine[3] is not '(' or '+' , '-', '*'. Unable to understand statement");
 }
 
 //movl    value, offset(%rbp)
@@ -603,7 +602,6 @@ void parse(const string &line)
     string word;
     for (const auto &letter : line)
     {
-
         if (isalpha(letter))
         {
             word += letter;
