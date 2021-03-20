@@ -31,13 +31,19 @@ bool endFor = false;
 bool isFalseResult_if = false;
 bool endIf = false;
 
-int functionOffset = 1;    //counts offset for functions during function declaration
+int functionOffset = 1;
 int regCount = 0;          //counts # of registers in use
 int redZoneCount = 0;      //counts amount of Red Zone used in units of 4 bytes
 bool redZoneBreak = false; // if function breaks redzone (more than 128 bytes used), then redZoneBreak = true.
 int openBracket = 0;       // keeps track of # of nested statements
 int functCount = 0;        // keeps track of how many functions exist besides main()
+int leafRegCount = 0;      //counts # of registers used in leaf function (if applicable)
 
+//////////////////////////
+// FUNCTIONS............//
+//////////////////////////
+
+//int test(int a, int b, int c, int d, int e[3], int f, int g, int h[2]){
 void functionDeclaration(vector<string> &parsedLine)
 {
     //this is the epilogue for test(), for when we enter main(). We must print out the epilogue for test() if it exists.
@@ -57,6 +63,8 @@ void functionDeclaration(vector<string> &parsedLine)
 
     if (regCount == 5) //this is for main() in the case of existence of leaf functions (test1)
         cout << "subq   $64, %rsp" << endl;
+
+    leafRegCount = regCount; //stores regCount for previous function
 
     functionOffset = 1;   //resets functionOffset
     regCount = 0;         //resets registers
@@ -158,6 +166,102 @@ void functionDeclaration(vector<string> &parsedLine)
         redZoneBreak = true;
         cout << "subq   $" << 4 + (4 * (redZoneCount - 32)) << ", %rsp" << endl;
     }
+}
+
+//MUST REVERSE ORDER ie. load f then e then d then c then b then a
+//i = test(a,b,c,d,e,f,g,h)
+// if parameter is int, use movl X(%register). if it is array member, use leaq Y(%register), where Y is lowest offset in array (ie offset of first element in array)
+void functionCall(vector<string> &parsedLine)
+{
+    int functCallRegCounter = 0;     //counts # of registers used in function call
+    int functCallRedZoneCounter = 0; //counts # of 8-byte (quadword) units needed for addq $X, %rsp after registers are filled
+
+    string outputString;     //will print this to screen (registers)
+    string postOutputString; //will print this to screen (do not fit in registers)
+
+    int words = parsedLine.size();
+    for (int i = 3; i < words; i++)
+    {
+        if (variableToRbp.count(parsedLine[i] + '0') > 0) //for array members; if variableToRbp[n0] exists then....
+        {
+            switch (functCallRegCounter)
+            {
+            case 5:
+                outputString.insert(0, ("leaq   " + variableToRbp[(parsedLine[i] + '0')] + ", %r9" + '\n'));
+                functCallRegCounter++;
+                break;
+            case 4:
+                outputString.insert(0, ("leaq   " + variableToRbp[(parsedLine[i] + '0')] + ", %r8" + '\n'));
+                functCallRegCounter++;
+                break;
+            case 3:
+                outputString.insert(0, ("leaq   " + variableToRbp[(parsedLine[i] + '0')] + ", %rcx" + '\n'));
+                functCallRegCounter++;
+                break;
+            case 2:
+                outputString.insert(0, ("leaq   " + variableToRbp[(parsedLine[i] + '0')] + ", %rdx" + '\n'));
+                functCallRegCounter++;
+                break;
+            case 1:
+                outputString.insert(0, ("leaq   " + variableToRbp[(parsedLine[i] + '0')] + ", %rsi" + '\n'));
+                functCallRegCounter++;
+                break;
+            case 0:
+                outputString.insert(0, ("leaq   " + variableToRbp[(parsedLine[i] + '0')] + ", %rax" + '\n'));
+                functCallRegCounter++;
+                break;
+            default:
+                postOutputString.insert(0, ("leaq   " + variableToRbp[(parsedLine[i] + '0')] + ", %rdi" + '\n' + "pushq   %rdi" + '\n'));
+                functCallRedZoneCounter++;
+                break;
+            }
+        }
+
+        else if (variableToRbp.count(parsedLine[i]) > 0) //for int parameters
+        {
+            switch (functCallRegCounter)
+            {
+            case 5:
+                outputString.insert(0, ("movl   " + variableToRbp[parsedLine[i]] + ", %r9d" + '\n'));
+                functCallRegCounter++;
+                break;
+            case 4:
+                outputString.insert(0, ("movl   " + variableToRbp[parsedLine[i]] + ", %r8d" + '\n'));
+                functCallRegCounter++;
+                break;
+            case 3:
+                outputString.insert(0, ("movl   " + variableToRbp[parsedLine[i]] + ", %ecx" + '\n'));
+                functCallRegCounter++;
+                break;
+            case 2:
+                outputString.insert(0, ("movl   " + variableToRbp[parsedLine[i]] + ", %edx" + '\n'));
+                functCallRegCounter++;
+                break;
+            case 1:
+                outputString.insert(0, ("movl   " + variableToRbp[parsedLine[i]] + ", %esi" + '\n'));
+                functCallRegCounter++;
+                break;
+            case 0:
+                outputString.insert(0, ("movl   " + variableToRbp[parsedLine[i]] + ", %eax" + '\n'));
+                functCallRegCounter++;
+                break;
+            default:
+                postOutputString.insert(0, ("movl   " + variableToRbp[parsedLine[i]] + ", %edi" + '\n' + "pushq   %rdi" + '\n'));
+                functCallRedZoneCounter++;
+                break;
+            }
+        }
+    }
+    cout << outputString;
+    outputString = "";
+    cout << postOutputString;
+    postOutputString = "";
+    cout << "movq   %eax, %edi" << endl; //prepare for function call to return to %eax
+    //begin function call
+    cout << "call   " << parsedLine[1] << endl;
+    if (functCallRedZoneCounter > 0)
+        cout << "addq   $" << functCallRedZoneCounter * 8 << ", %rsp" << endl; //rsp shift
+    cout << "movl   %eax, " << variableToRbp[parsedLine[0]] << endl;           //assigns return of function to variable
 }
 
 /*

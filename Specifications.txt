@@ -1,0 +1,7 @@
+Specifications:
+
+- Array initialization must be on new line.
+- Variables names can only be alphanumeric and can contain no special symbols other than '_'.
+- Every variable must be initialized with a value
+- syntaxes like i++ are not allowed, must be replaces with i = i + 1
+- main function must be initialized before all other functions
