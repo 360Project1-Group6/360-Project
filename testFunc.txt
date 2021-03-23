@@ -1,6 +1,0 @@
-int main(){
-	int a[5]={10,74,54,46,7};
-	int min_inx = 0;
-    int temp = a[min_inx];
-    
-}

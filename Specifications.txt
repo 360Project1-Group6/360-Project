@@ -2,6 +2,32 @@ Specifications:
 
 - Array initialization must be on new line.
 - Variables names can only be alphanumeric and can contain no special symbols other than '_'.
-- Every variable must be initialized with a value
+- Every variable must be initialized with a value other than function declaration
 - syntaxes like i++ are not allowed, must be replaces with i = i + 1
-- main function must be initialized before all other functions
+
+How to run Compiler:
+
+1. Create an executable: g++ <Filename> -std=c++11
+    E.g., g++ Compiler.cpp -std=c++11
+
+2. Run the executable along with the file name of the code you want to compiler as the only command line argument: ./a.out <Filename>
+    E.g., ./a.out cpp.txt
+
+3. Voila! Your translated assembly code will be displayed in the terminal
+
+
+Responsibilities:
+
+Zhi Dong Dong:
+    - Variable initialization and access
+    - Array declaration and access
+    - Arithmetic operations (with/without array)
+
+Wen Bo: 
+    - If statement
+    - For statement
+
+Shinnosuke Takahashi
+    - Function declaration 
+    - Function calls
+    - Red zone management
